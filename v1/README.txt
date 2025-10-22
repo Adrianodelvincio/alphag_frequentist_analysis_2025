@@ -18,6 +18,10 @@
 
 - scp -r alpha@alphasuperdaq:alphasoft/Users/Adriano/ag13708/ ./
 
+* bonus: in my local folder I have already all the data, so you can use the command
+
+- scp -r alpha@alphasuperdaq:alphasoft/Users/Adriano/ag*/ ./
+
 # now download the spilllog of the run from the elog and place it in the same folder with the data. Rename it changing the "R" prefix to "ag"
 
 # open the Preliminary_Scurve_2025.ipynb and follow the instructions in the code comments and run the notebook

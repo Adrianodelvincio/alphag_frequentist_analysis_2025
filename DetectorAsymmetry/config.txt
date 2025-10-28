@@ -1,0 +1,8 @@
+Dmu = +0.02
+Dsigma = 0.08
+K = 0.85
+real_gravity = -10
+Ntot = 1100
+nB_val = 7
+Ntoys = 1000
+pfraction = 0.5

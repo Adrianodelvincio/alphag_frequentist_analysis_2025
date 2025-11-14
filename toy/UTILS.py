@@ -3,11 +3,11 @@ from scipy.optimize import brentq
 import numpy as np
 
 ####### Module variables
-dt = 1e-4 #seconds
+dt = 1e-3 #seconds
 ######
 
 
-def Gradient_Computation(f, x, h=1e-4):
+def Gradient_Computation(f, x, h=0.5):
     """
     Return grad_f(x)
     grad_f(x) from central finite differencies
@@ -16,22 +16,32 @@ def Gradient_Computation(f, x, h=1e-4):
     g = (f(x + dx) - f(x - dx)) / (2*h)
     return g
 
-def Verlet_Update(Z, V, Time, Bfield, CONSTANTS):
+def Verlet_Update(V, Z, Time, Bfield, CONSTANTS):
     """
     Return Velocity V(t + dt), x(t + dt)
     Implementation of the Verlet Algorithm
     """
-    Potential = lambda z: (.5 * CONSTANTS.bohr_magneton) * Bfield(z) # define the potential
+    V = V * 1e3 # convert from m/s to mm/s
+    
+    Potential = lambda z: ( .5 * CONSTANTS.bohr_magneton) * Bfield(z) # define the potential
     
     ACC = - Gradient_Computation(Potential,Z)  / CONSTANTS.mass # Compute the acceleration at the current step
+    ACC *= 1e6 # convert m in joule definitio to mm
     
-    Z_nextstep = X + V*dt + .5*ACC*dt**2 # 1. compute the next step
+    Z_nextstep = Z + V*dt + .5*ACC*dt**2 # 1. compute the next step
     
     ACC_nextstep = - Gradient_Computation(Potential, Z_nextstep) / CONSTANTS.mass # 2. compute the acceleration at the next step
+
+    ACC_nextstep *= 1e6
     
     V_nextstep = V + 0.5*(ACC + ACC_nextstep)*dt # 3. compute the velocity at the next step
-
-    return V_nextstep, Z_nextstep
+    
+    V_nextstep = V_nextstep * 1e-3 #back to m/s
+    
+    #print(f"Z position {Z:.3f} speed {V*1e-3:.3f} acceleration {ACC:.4f} acceleration next step {ACC_nextstep:.4f}")
+    #print(Z_nextstep, V_nextstep)
+    
+    return V_nextstep, Z_nextstep, (Time + dt)
 
 def InitialCondition(Bfield, CONSTANTS):
     """
@@ -41,7 +51,7 @@ def InitialCondition(Bfield, CONSTANTS):
     this is not a formally correct calculation, for which you
     would need microcanonical ensemble formalism
     """
-    Potential = lambda z: (.5 * CONSTANTS.bohr_magneton) * Bfield(z) # define the potential
+    Potential = lambda z: ( .5 * CONSTANTS.bohr_magneton) * Bfield(z) # define the potential
     
     # extracting the energy from the maxwell distribution
     scale = np.sqrt(CONSTANTS.kB * CONSTANTS.Temperature/CONSTANTS.mass)

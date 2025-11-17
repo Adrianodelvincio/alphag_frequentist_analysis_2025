@@ -1,13 +1,24 @@
 from scipy.stats import maxwell
 from scipy.optimize import brentq
 import numpy as np
+from numba import njit
 
 ####### Module variables
-dt = 1e-3 #seconds
+dt = 1e-4 #seconds
+mass = 1.6735575e-27 # kg, mass Hbar
+bohr_magneton = 9.2740100657e-24 # J/T, CODATA 2022
+kB = 1.380649e-23   # J/K
+Temperature = 10e-3 # K
+Zmin = -0.605 # m
+Zmax = -0.481 # m
+Zmid = -0.544 # m
+zacceptance_min = -0.775
+zacceptance_max = -0.325
+mu_eff_over_m = .5 * bohr_magneton / mass
 ######
 
 
-def Gradient_Computation(f, x, h=0.5):
+def Gradient_Computation(f, x, h=0.0005):
     """
     Return grad_f(x)
     grad_f(x) from central finite differencies
@@ -16,27 +27,23 @@ def Gradient_Computation(f, x, h=0.5):
     g = (f(x + dx) - f(x - dx)) / (2*h)
     return g
 
-def Verlet_Update(V, Z, Time, Bfield, CONSTANTS):
+def Verlet_Update(V, Z, Time, Bfield, h=0.0005):
     """
     Return Velocity V(t + dt), x(t + dt)
     Implementation of the Verlet Algorithm
     """
-    V = V * 1e3 # convert from m/s to mm/s
+
+    dB_dz = (Bfield(Z + h) - Bfield(Z - h))/(2*h)
     
-    Potential = lambda z: ( .5 * CONSTANTS.bohr_magneton) * Bfield(z) # define the potential
-    
-    ACC = - Gradient_Computation(Potential,Z)  / CONSTANTS.mass # Compute the acceleration at the current step
-    ACC *= 1e6 # convert m in joule definitio to mm
+    ACC = - .5 * bohr_magneton * dB_dz  / mass # Compute the acceleration at the current step
     
     Z_nextstep = Z + V*dt + .5*ACC*dt**2 # 1. compute the next step
-    
-    ACC_nextstep = - Gradient_Computation(Potential, Z_nextstep) / CONSTANTS.mass # 2. compute the acceleration at the next step
 
-    ACC_nextstep *= 1e6
+    dB_dznext = (Bfield(Z_nextstep + h) - Bfield(Z_nextstep - h))/(2*h)
+    
+    ACC_nextstep = - .5 * bohr_magneton * dB_dznext / mass # 2. compute the acceleration at the next step
     
     V_nextstep = V + 0.5*(ACC + ACC_nextstep)*dt # 3. compute the velocity at the next step
-    
-    V_nextstep = V_nextstep * 1e-3 #back to m/s
     
     #print(f"Z position {Z:.3f} speed {V*1e-3:.3f} acceleration {ACC:.4f} acceleration next step {ACC_nextstep:.4f}")
     #print(Z_nextstep, V_nextstep)
@@ -84,5 +91,78 @@ def InitialCondition(Bfield, CONSTANTS):
 
     # compute velocity
     v =  np.sqrt(2* Ek / CONSTANTS.mass)
+    v = v * (np.random.choice([-1, 1]))
     
     return v, Zsample
+
+
+
+#################################################
+# njit to increase the performace
+################################################
+
+@njit
+def idx_nearest(z, z0, dz, N):
+    # z0 = zgrid[0], dz = zgrid[1]-zgrid[0], N = len(zgrid)
+    idx = int((z - z0)/dz + 0.5)   # round to nearest
+    if idx < 0:
+        idx = 0
+    elif idx >= N:
+        idx = N - 1
+    return idx
+
+@njit
+def dB_seg(z, Tloc, ramplength, z0, dz, dBinit, dBfinal):
+    alpha = Tloc / ramplength
+    N = dBinit.shape[0]
+    i = idx_nearest(z, z0, dz, N)
+    dinit = dBinit[i]
+    dfinal = dBfinal[i]
+    return dinit + (dfinal - dinit)*alpha
+
+@njit
+def dB_plateau(z, z0, dz, dBgrid):
+    N = dBgrid.shape[0]
+    i = idx_nearest(z, z0, dz, N)
+    return dBgrid[i]
+
+@njit
+def step_all_particles(Z, V, Time,
+                       seg_id, Tloc, ramp_len,
+                       z0, dz,          # da zgrid[0], zgrid[1]-zgrid[0]
+                       dBinit, dBfinal,
+                       Annih, T_ann):
+    
+    N = Z.shape[0] # Get Number of Particles
+    for i in range(N):
+        if Annih[i]:
+            continue
+
+        z = Z[i]
+
+        if(seg_id == 0): # ramp
+            dB = dB_seg(z, Tloc, ramp_len, z0, dz, dBinit, dBfinal) # >>>
+        elif(seg_id == 1):
+            dB = dB_plateau(z, z0, dz, dBfinal) # >>>
+
+        a  = -mu_eff_over_m * dB
+
+        # --- Verlet posizione ---
+        z_new = z + V[i]*dt + 0.5*a*dt*dt
+
+        # --- dB/dz al passo successivo ---
+        if seg_id == 0: # ramp
+            dB_next = dB_seg(z_new, Tloc+dt, ramp_len, z0, dz, dBinit, dBfinal)
+        elif seg_id == 1:
+            dB_next = dB_plateau(z_new, z0, dz, dBfinal)
+
+        a_next = -mu_eff_over_m * dB_next
+
+        # --- Verlet velocità ---
+        V[i] = V[i] + 0.5*(a + a_next)*dt
+        Z[i] = z_new
+
+        # --- annichilazione se esce ---
+        if (z_new < zacceptance_min) or (z_new > zacceptance_max):
+            Annih[i] = True
+            T_ann[i] = Time + dt

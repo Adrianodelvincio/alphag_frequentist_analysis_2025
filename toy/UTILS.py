@@ -9,6 +9,8 @@ mass = 1.6735575e-27 # kg, mass Hbar
 bohr_magneton = 9.2740100657e-24 # J/T, CODATA 2022
 kB = 1.380649e-23   # J/K
 Temperature = 5e-3 # K
+harmonic_degree = 2 # degree of the harmonic potential
+harmonic_coefficient = 10 # coefficient harmonic potential
 Zmin = -0.605 # m
 Zmax = -0.481 # m
 Zmid = -0.544 # m
@@ -18,14 +20,27 @@ mu_eff_over_m = .5 * bohr_magneton / mass
 ######
 
 
-def Gradient_Computation(f, x, h=0.0005):
+def Gradient_Computation_1d(f, z, h=0.0005):
+    """
+    Return grad_f(x)
+    grad_f(x) from central finite differencies
+    """
+    dz = h
+    df_dz = (f(z + dz) - f(z - dz)) / (2*h)
+    return df_dz
+
+def Gradient_Computation_3d(f, x, y, z,  h=0.0005):
     """
     Return grad_f(x)
     grad_f(x) from central finite differencies
     """
     dx = h
-    g = (f(x + dx) - f(x - dx)) / (2*h)
-    return g
+    dy = h
+    dz = h
+    df_dx = (f(x + dx) - f(x - dx)) / (2*h)
+    df_dy = (f(y + dy) - f(y - dy)) / (2*h)
+    df_dz = (f(z + dz) - f(z - dz)) / (2*h)
+    return [df_dx, df_dy, df_dz]
 
 def Verlet_Update(V, Z, Time, Bfield, h=0.0005):
     """
@@ -112,12 +127,23 @@ def idx_nearest(z, z0, dz, N):
     return idx
 
 @njit
-def dB_seg(z, Tloc, ramplength, z0, dz, dBinit, dBfinal):
+def dB_seg(z, x, y, Tloc, ramplength, z0, dz, dBinit, dBfinal):
+    # compute the 3d gradient
     alpha = Tloc / ramplength
     N = dBinit.shape[0]
     i = idx_nearest(z, z0, dz, N)
     dinit = dBinit[i]
     dfinal = dBfinal[i]
+
+    r = np.sqrt((x*x + y*y)) # compute radius
+    coeff_z = (1 + harmonic_coefficient * r**harmonic_degree) # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    coeff_x = harmonic_degree*harmonic_coefficient* x**(harmonic_degree - 1) # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    coeff_y = harmonic_degree*harmonic_coefficient* y**(harmonic_degree - 1) # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    
+    dB_dx = 
+    dB_dy =
+    dB_dz =
+    
     return dinit + (dfinal - dinit)*alpha
 
 @njit
@@ -127,7 +153,7 @@ def dB_plateau(z, z0, dz, dBgrid):
     return dBgrid[i]
 
 @njit
-def step_all_particles(Z, V, Time,
+def step_all_particles(Z, V, Time, # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                        seg_id, Tloc, ramp_len,
                        z0, dz,          # da zgrid[0], zgrid[1]-zgrid[0]
                        dBinit, dBfinal,
@@ -141,7 +167,7 @@ def step_all_particles(Z, V, Time,
         z = Z[i]
 
         if(seg_id == 0): # ramp
-            dB = dB_seg(z, Tloc, ramp_len, z0, dz, dBinit, dBfinal) # >>>
+            dB = dB_seg(z, Tloc, ramp_len, z0, dz, dBinit, dBfinal) # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
         elif(seg_id == 1):
             dB = dB_plateau(z, z0, dz, dBfinal) # >>>
 
@@ -152,7 +178,7 @@ def step_all_particles(Z, V, Time,
 
         # --- dB/dz al passo successivo ---
         if seg_id == 0: # ramp
-            dB_next = dB_seg(z_new, Tloc+dt, ramp_len, z0, dz, dBinit, dBfinal)
+            dB_next = dB_seg(z_new, Tloc+dt, ramp_len, z0, dz, dBinit, dBfinal) # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
         elif seg_id == 1:
             dB_next = dB_plateau(z_new, z0, dz, dBfinal)
 

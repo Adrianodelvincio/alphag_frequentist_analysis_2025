@@ -4,11 +4,11 @@ import numpy as np
 from numba import njit
 
 ####### Module variables
-dt = 1e-4 #seconds
+dt = .5e-4 #seconds
 mass = 1.6735575e-27 # kg, mass Hbar
 bohr_magneton = 9.2740100657e-24 # J/T, CODATA 2022
 kB = 1.380649e-23   # J/K
-Temperature = 10e-3 # K
+Temperature = 5e-3 # K
 Zmin = -0.605 # m
 Zmax = -0.481 # m
 Zmid = -0.544 # m

@@ -21,6 +21,8 @@ def ReadTheSpill(filename, window):
     stop  = []
     start = []
     counter = 1
+    if(occurrencies < 1):
+        print(f"window {window} NOT FOUND")
     with open(filename.replace(".vertex.csv", "spilllog.log.txt"), "r") as file:
         for line in file:
             if (window in line):

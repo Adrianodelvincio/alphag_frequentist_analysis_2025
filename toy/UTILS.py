@@ -11,7 +11,7 @@ kB = 1.380649e-23   # J/K
 Temperature = 5e-3 # K
 Temperature_transv = 5e-3 # K
 harmonic_degree = 2 # degree of the harmonic potential
-harmonic_coefficient = 10 # coefficient harmonic potential
+harmonic_coefficient = 0.5 # coefficient harmonic potential
 Zmin = -0.605 # m
 Zmax = -0.481 # m
 Zmid = -0.544 # m
@@ -177,7 +177,7 @@ def InitialCondition_3d(Bfield, CONSTANTS):
     theta = np.random.uniform(0, 2*np.pi)
     vx, vy = v_transv * np.cos(theta), v_transv * np.sin(theta)
     
-    return np.array([v_axial, vx, vy], dtype=float), np.array([0, 0, Zsample], dtype=float)
+    return np.array([vx, vy, v_axial], dtype=float), np.array([0, 0, Zsample], dtype=float)
 
 
 #################################################
@@ -230,9 +230,8 @@ def dB_seg(z, x, y,
     dBt_dx = dBi_dx + (dBf_dx - dBi_dx) * alpha
     dBt_dy = dBi_dy + (dBf_dy - dBi_dy) * alpha
     dBt_dz = dBi_dz + (dBf_dz - dBi_dz) * alpha
-
-    dB = np.array([dBt_dx, dBt_dy, dBt_dz])
-    return dB
+    
+    return dBt_dx, dBt_dy, dBt_dz
 
 @njit
 def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid):
@@ -245,13 +244,11 @@ def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid):
     coeff_y = harmonic_degree*harmonic_coefficient* y**(harmonic_degree - 1)
     
     # Compute Bfield gradient at alpha = 0, ramp start 
-    dB_dx = dBgrid[i]  * coeff_x
+    dB_dx = Bgrid[i]  * coeff_x
     dB_dy = Bgrid[i]   * coeff_y
-    dB_dz = Bgrid[i]   * coeff_z
-
-    dB = np.array([dB_dx, dB_dy, dB_dz])
+    dB_dz = dBgrid[i]   * coeff_z
     
-    return dB
+    return dB_dx, dB_dy, dB_dz
 
 @njit
 def step_all_particles(R,V,
@@ -262,7 +259,8 @@ def step_all_particles(R,V,
                        Binit,
                        dBfinal,
                        Bfinal,
-                       Annih, T_ann):
+                       Annih, T_ann,
+                       dB_buffer):
     # Z, X, Y: 3d array for each particle
     
     N = R.shape[0] # Get Number of Particles
@@ -276,19 +274,22 @@ def step_all_particles(R,V,
         z = R[i, 2]
 
         if(seg_id == 0): # ramp
-            dB = dB_seg(z, x, y,
+            dBx, dBy, dBz = dB_seg(z, x, y,
                         Tloc, ramp_len, 
                         z0, dz, 
                         dBinit,
                         Binit,
                         dBfinal,
                         Bfinal)
-        elif(seg_id == 1):
-            dB = dB_plateau(z, x, y, 
+        elif(seg_id == 1): # wait
+            dBx, dBy, dBz = dB_plateau(z, x, y, 
                             z0, dz, 
-                            dBfinal, Bfinal)
-
-        a  = -mu_eff_over_m * dB
+                            dBfinal, 
+                            Bfinal)
+        dB_buffer[0] = dBx
+        dB_buffer[1] = dBy
+        dB_buffer[2] = dBz
+        a  = -mu_eff_over_m * dB_buffer
 
         # --- Verlet posizione ---
         R_new = R[i] + V[i]*dt + 0.5*a*dt*dt
@@ -299,19 +300,22 @@ def step_all_particles(R,V,
         
         # --- dB/dz al passo successivo ---
         if seg_id == 0: # ramp
-            dB_next = dB_seg(z_new, x_new, y_new,
+            dBx, dBy, dBz = dB_seg(z_new, x_new, y_new,
                              Tloc+dt, ramp_len,
                              z0, dz,
                              dBinit, 
                              Binit,
                              dBfinal,
-                             Bfinal )
-        elif seg_id == 1:
-            dB_next = dB_plateau(z_new, x_new, y_new, 
+                             Bfinal)
+        elif seg_id == 1: # wait
+            dBx, dBy, dBz = dB_plateau(z_new, x_new, y_new, 
                                  z0, dz, 
-                                 dBfinal)
-
-        a_next = -mu_eff_over_m * dB_next
+                                 dBfinal,
+                                 Bfinal)
+        dB_buffer[0] = dBx
+        dB_buffer[1] = dBy
+        dB_buffer[2] = dBz
+        a_next = -mu_eff_over_m * dB_buffer
 
         # --- Update Velocity and Position ---
         V[i] = V[i] + 0.5*(a + a_next)*dt

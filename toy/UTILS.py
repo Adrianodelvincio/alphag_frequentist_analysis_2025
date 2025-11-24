@@ -127,24 +127,42 @@ def idx_nearest(z, z0, dz, N):
     return idx
 
 @njit
-def dB_seg(z, x, y, Tloc, ramplength, z0, dz, dBinit, dBfinal):
+def dB_seg(z, x, y, 
+           Tloc, ramplength, 
+           z0, dz, 
+           dBinit,
+           Binit,
+           dBfinal,
+           Bfinal):
     # compute the 3d gradient
-    alpha = Tloc / ramplength
+    # Tloc = local time during the ramp
+    
+    alpha = Tloc / ramplength # time parameter
     N = dBinit.shape[0]
-    i = idx_nearest(z, z0, dz, N)
-    dinit = dBinit[i]
+    i = idx_nearest(z, z0, dz, N) # find the closest point on the grid
+    dinit  = dBinit[i]
     dfinal = dBfinal[i]
 
     r = np.sqrt((x*x + y*y)) # compute radius
-    coeff_z = (1 + harmonic_coefficient * r**harmonic_degree) # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-    coeff_x = harmonic_degree*harmonic_coefficient* x**(harmonic_degree - 1) # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-    coeff_y = harmonic_degree*harmonic_coefficient* y**(harmonic_degree - 1) # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
+    coeff_x = harmonic_degree*harmonic_coefficient* x**(harmonic_degree - 1)
+    coeff_y = harmonic_degree*harmonic_coefficient* y**(harmonic_degree - 1)
     
-    dB_dx = 
-    dB_dy =
-    dB_dz =
+    # Compute Bfield gradient at alpha = 0, ramp start 
+    dBi_dx = Binit[i]  * coeff_x
+    dBi_dy = Binit[i]  * coeff_y
+    dBi_dz = dBinit[i] * coeff_z
+    # Compute the Bfield gradient at alpha = Tramp, 
+    dBf_dx = Bfinal[i]  * coeff_x
+    dBf_dy = Bfinal[i]  * coeff_y
+    dBf_dz = dBfinal[i] * coeff_z
+
+    # Create the ramp
+    dBt_dx = dBi_dx + (dBf_dx - dBi_dx) * alpha
+    dBt_dy = dBi_dy + (dBf_dy - dBi_dy) * alpha
+    dBt_dz = dBi_dz + (dBf_dz - dBi_dz) * alpha
     
-    return dinit + (dfinal - dinit)*alpha
+    return dBt_dx, dBt_dy, dBt_dz
 
 @njit
 def dB_plateau(z, z0, dz, dBgrid):

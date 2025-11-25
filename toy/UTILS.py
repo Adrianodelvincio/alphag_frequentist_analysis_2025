@@ -3,21 +3,8 @@ from scipy.optimize import brentq
 import numpy as np
 from numba import njit
 
-####### Module variables
+####### Module
 dt = .5e-4 #seconds
-mass = 1.6735575e-27 # kg, mass Hbar
-bohr_magneton = 9.2740100657e-24 # J/T, CODATA 2022
-kB = 1.380649e-23   # J/K
-Temperature = 5e-3 # K
-Temperature_transv = 5e-3 # K
-harmonic_degree = 2 # degree of the harmonic potential
-harmonic_coefficient = 0.5 # coefficient harmonic potential
-Zmin = -0.605 # m
-Zmax = -0.481 # m
-Zmid = -0.544 # m
-zacceptance_min = -0.775
-zacceptance_max = -0.325
-mu_eff_over_m = .5 * bohr_magneton / mass
 ######
 
 
@@ -42,29 +29,6 @@ def Gradient_Computation_3d(f, x, y, z,  h=0.0005):
     df_dy = (f(y + dy) - f(y - dy)) / (2*h)
     df_dz = (f(z + dz) - f(z - dz)) / (2*h)
     return [df_dx, df_dy, df_dz]
-
-def Verlet_Update(V, Z, Time, Bfield, h=0.0005):
-    """
-    Return Velocity V(t + dt), x(t + dt)
-    Implementation of the Verlet Algorithm
-    """
-
-    dB_dz = (Bfield(Z + h) - Bfield(Z - h))/(2*h)
-    
-    ACC = - .5 * bohr_magneton * dB_dz  / mass # Compute the acceleration at the current step
-    
-    Z_nextstep = Z + V*dt + .5*ACC*dt**2 # 1. compute the next step
-
-    dB_dznext = (Bfield(Z_nextstep + h) - Bfield(Z_nextstep - h))/(2*h)
-    
-    ACC_nextstep = - .5 * bohr_magneton * dB_dznext / mass # 2. compute the acceleration at the next step
-    
-    V_nextstep = V + 0.5*(ACC + ACC_nextstep)*dt # 3. compute the velocity at the next step
-    
-    #print(f"Z position {Z:.3f} speed {V*1e-3:.3f} acceleration {ACC:.4f} acceleration next step {ACC_nextstep:.4f}")
-    #print(Z_nextstep, V_nextstep)
-    
-    return V_nextstep, Z_nextstep, (Time + dt)
 
 def InitialCondition(Bfield, CONSTANTS):
     """
@@ -201,7 +165,8 @@ def dB_seg(z, x, y,
            dBinit,
            Binit,
            dBfinal,
-           Bfinal):
+           Bfinal,
+           COSTANTS):
     # compute the 3d gradient
     # Tloc = local time during the ramp
     # z0, dz needed to find the closest point on the grid
@@ -213,9 +178,9 @@ def dB_seg(z, x, y,
     dfinal = dBfinal[i]
 
     r = np.sqrt((x*x + y*y)) # compute radius
-    coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
-    coeff_x = harmonic_degree*harmonic_coefficient* x**(harmonic_degree - 1)
-    coeff_y = harmonic_degree*harmonic_coefficient* y**(harmonic_degree - 1)
+    coeff_z = (1 + harmonic_coefficient * r**COSTANTS.harmonic_degree)
+    coeff_x = COSTANTS.harmonic_degree*harmonic_coefficient* x**(COSTANTS.harmonic_degree - 1)
+    coeff_y = COSTANTS.harmonic_degree*harmonic_coefficient* y**(COSTANTS.harmonic_degree - 1)
     
     # Compute Bfield gradient at alpha = 0, ramp start 
     dBi_dx = Binit[i]  * coeff_x
@@ -234,14 +199,14 @@ def dB_seg(z, x, y,
     return dBt_dx, dBt_dy, dBt_dz
 
 @njit
-def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid):
+def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid, COSTANTS):
     N = dBgrid.shape[0]
     i = idx_nearest(z, z0, dz, N)
 
     r = np.sqrt((x*x + y*y)) # compute radius
-    coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
-    coeff_x = harmonic_degree*harmonic_coefficient* x**(harmonic_degree - 1)
-    coeff_y = harmonic_degree*harmonic_coefficient* y**(harmonic_degree - 1)
+    coeff_z = (1 + COSTANTS.harmonic_coefficient * r**COSTANTS.harmonic_degree)
+    coeff_x = COSTANTS.harmonic_degree*COSTANTS.harmonic_coefficient* x**(COSTANTS.harmonic_degree - 1)
+    coeff_y = COSTANTS.harmonic_degree*COSTANTS.harmonic_coefficient* y**(COSTANTS.harmonic_degree - 1)
     
     # Compute Bfield gradient at alpha = 0, ramp start 
     dB_dx = Bgrid[i]  * coeff_x
@@ -260,7 +225,8 @@ def step_all_particles(R,V,
                        dBfinal,
                        Bfinal,
                        Annih, T_ann,
-                       dB_buffer):
+                       dB_buffer,
+                       COSTANTS):
     # Z, X, Y: 3d array for each particle
     
     N = R.shape[0] # Get Number of Particles
@@ -280,16 +246,16 @@ def step_all_particles(R,V,
                         dBinit,
                         Binit,
                         dBfinal,
-                        Bfinal)
+                        Bfinal,COSTANTS)
         elif(seg_id == 1): # wait
             dBx, dBy, dBz = dB_plateau(z, x, y, 
                             z0, dz, 
                             dBfinal, 
-                            Bfinal)
+                            Bfinal,COSTANTS)
         dB_buffer[0] = dBx
         dB_buffer[1] = dBy
         dB_buffer[2] = dBz
-        a  = -mu_eff_over_m * dB_buffer
+        a  = -COSTANTS.mu_eff_over_m * dB_buffer
 
         # --- Verlet posizione ---
         R_new = R[i] + V[i]*dt + 0.5*a*dt*dt
@@ -306,22 +272,22 @@ def step_all_particles(R,V,
                              dBinit, 
                              Binit,
                              dBfinal,
-                             Bfinal)
+                             Bfinal,COSTANTS)
         elif seg_id == 1: # wait
             dBx, dBy, dBz = dB_plateau(z_new, x_new, y_new, 
                                  z0, dz, 
                                  dBfinal,
-                                 Bfinal)
+                                 Bfinal,COSTANTS)
         dB_buffer[0] = dBx
         dB_buffer[1] = dBy
         dB_buffer[2] = dBz
-        a_next = -mu_eff_over_m * dB_buffer
+        a_next = -COSTANTS.mu_eff_over_m * dB_buffer
 
         # --- Update Velocity and Position ---
         V[i] = V[i] + 0.5*(a + a_next)*dt
         R[i] = R_new
 
         # --- annichilazione se esce ---
-        if (z_new < zacceptance_min) or (z_new > zacceptance_max):
+        if (z_new < COSTANTS.zacceptance_min) or (z_new > COSTANTS.zacceptance_max):
             Annih[i] = True
             T_ann[i] = Time + dt

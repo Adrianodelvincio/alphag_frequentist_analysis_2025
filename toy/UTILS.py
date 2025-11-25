@@ -245,8 +245,8 @@ def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid):
     
     # Compute Bfield gradient at alpha = 0, ramp start 
     dB_dx = Bgrid[i]  * coeff_x
-    dB_dy = Bgrid[i]   * coeff_y
-    dB_dz = dBgrid[i]   * coeff_z
+    dB_dy = Bgrid[i]  * coeff_y
+    dB_dz = dBgrid[i] * coeff_z
     
     return dB_dx, dB_dy, dB_dz
 

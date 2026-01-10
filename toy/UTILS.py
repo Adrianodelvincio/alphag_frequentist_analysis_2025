@@ -240,13 +240,20 @@ def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid):
 
     r = np.sqrt((x*x + y*y)) # compute radius
     coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
-    coeff_x = harmonic_degree*harmonic_coefficient* x**(harmonic_degree - 1)
-    coeff_y = harmonic_degree*harmonic_coefficient* y**(harmonic_degree - 1)
+    
+    if r > 0:
+        coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
+        coeff_x = harmonic_degree * harmonic_coefficient * x * r**(harmonic_degree - 2)
+        coeff_y = harmonic_degree * harmonic_coefficient * y * r**(harmonic_degree - 2)
+    else:
+        coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
+        coeff_x = 0.0
+        coeff_y = 0.0
     
     # Compute Bfield gradient at alpha = 0, ramp start 
     dB_dx = Bgrid[i]  * coeff_x
     dB_dy = Bgrid[i]  * coeff_y
-    dB_dz = dBgrid[i]   * coeff_z
+    dB_dz = dBgrid[i] * coeff_z
     
     return dB_dx, dB_dy, dB_dz
 
@@ -280,25 +287,26 @@ def step_all_particles(R,V,
                         dBinit,
                         Binit,
                         dBfinal,
-                        Bfinal)
+                        Bfinal) # Compute the Gradient
         elif(seg_id == 1): # wait
             dBx, dBy, dBz = dB_plateau(z, x, y, 
                             z0, dz, 
                             dBfinal, 
                             Bfinal)
+        # set gradient vector
         dB_buffer[0] = dBx
         dB_buffer[1] = dBy
         dB_buffer[2] = dBz
-        a  = -mu_eff_over_m * dB_buffer
+        a  = -mu_eff_over_m * dB_buffer # compute the acceleration as gradient * magnetic moment / mass
 
-        # --- Verlet posizione ---
+        # --- Verlet position update ---
         R_new = R[i] + V[i]*dt + 0.5*a*dt*dt
         # get coordinates
         x_new = R_new[0]
         y_new = R_new[1]
         z_new = R_new[2]
         
-        # --- dB/dz al passo successivo ---
+        # --- dB/dz at next step ---
         if seg_id == 0: # ramp
             dBx, dBy, dBz = dB_seg(z_new, x_new, y_new,
                              Tloc+dt, ramp_len,

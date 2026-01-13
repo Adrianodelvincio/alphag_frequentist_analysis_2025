@@ -10,14 +10,14 @@ bohr_magneton = 9.2740100657e-24 # J/T, CODATA 2022
 kB = 1.380649e-23   # J/K
 Temperature = 5e-3 # K
 Temperature_transv = 5e-3 # K
-harmonic_degree = 2 # degree of the harmonic potential
-harmonic_coefficient = 0.5 # coefficient harmonic potential
+harmonic_degree = 2.2 # degree of the harmonic potential
+harmonic_coefficient = 50 # coefficient harmonic potential
 Zmin = -0.605 # m
 Zmax = -0.481 # m
-Zmid = -0.544 # m
+Zmid = -0.544 # m2
 zacceptance_min = -0.775
 zacceptance_max = -0.325
-mu_eff_over_m =  bohr_magneton / mass
+mu_eff_over_m =  (bohr_magneton) / mass
 ######
 
 
@@ -125,7 +125,7 @@ def InitialCondition_3d(Bfield, CONSTANTS):
     this is not a formal calculation, for which you
     would need microcanonical ensemble formalism
     """
-    Potential = lambda z: ( .5 * CONSTANTS.bohr_magneton) * Bfield(z) # define the potential
+    Potential = lambda z: (CONSTANTS.bohr_magneton) * Bfield(z) # define the potential
 
     #---------------------------------------------------------
     # AXIAL ENERGY
@@ -213,9 +213,15 @@ def dB_seg(z, x, y,
     dfinal = dBfinal[i]
 
     r = np.sqrt((x*x + y*y)) # compute radius
-    coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
-    coeff_x = harmonic_degree*harmonic_coefficient* x**(harmonic_degree - 1)
-    coeff_y = harmonic_degree*harmonic_coefficient* y**(harmonic_degree - 1)
+
+    if r > 0:
+        coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
+        coeff_x = harmonic_degree * harmonic_coefficient * x * r**(harmonic_degree - 2)
+        coeff_y = harmonic_degree * harmonic_coefficient * y * r**(harmonic_degree - 2)
+    else:
+        coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
+        coeff_x = 0.0
+        coeff_y = 0.0
     
     # Compute Bfield gradient at alpha = 0, ramp start 
     dBi_dx = Binit[i]  * coeff_x

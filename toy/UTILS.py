@@ -1,23 +1,27 @@
-from scipy.stats import maxwell
-from scipy.optimize import brentq
+from   scipy.stats    import maxwell
+from   scipy.optimize import brentq
 import numpy as np
-from numba import njit
+from   numba import njit
+import numba as nb
+from numba import prange
 
 ####### Module variables
-dt = .5e-4 #seconds
-mass = 1.6735575e-27 # kg, mass Hbar
-bohr_magneton = 9.2740100657e-24 # J/T, CODATA 2022
-kB = 1.380649e-23   # J/K
-Temperature = 5e-3 # K
-Temperature_transv = 5e-3 # K
-harmonic_degree = 2.2 # degree of the harmonic potential
+dt                   = 1e-4 #seconds
+mass                 = 1.6735575e-27 # kg, mass Hbar
+bohr_magneton        = 9.2740100657e-24 # J/T, CODATA 2022
+kB                   = 1.380649e-23   # J/K
+Temperature          = 5e-3 # K
+Temperature_transv   = 5e-3 # K
+harmonic_degree      = 2  # degree of the harmonic potential
 harmonic_coefficient = 50 # coefficient harmonic potential
-Zmin = -0.605 # m
-Zmax = -0.481 # m
-Zmid = -0.544 # m2
-zacceptance_min = -0.775
-zacceptance_max = -0.325
-mu_eff_over_m =  (bohr_magneton) / mass
+Zmin                 = -0.605 # m
+Zmax                 = -0.481 # m
+Zmid                 = -0.544 # m2
+zacceptance_min      = -0.775
+zacceptance_max      = -0.325
+mu_eff_over_m        =  (bohr_magneton) / mass
+# tau_mixing           = int(170/2)
+# theta = np.pi/4
 ######
 
 
@@ -184,6 +188,40 @@ def InitialCondition_3d(Bfield, CONSTANTS):
 # njit to increase the performace
 ################################################
 
+# Rotation around an axis (3d)
+@njit
+def rotation_matrix_axis_angle(axis, theta):
+    # normalizzazione manuale
+    nx, ny, nz = axis[0], axis[1], axis[2]
+    norm = np.sqrt(nx*nx + ny*ny + nz*nz)
+    nx, ny, nz = nx/norm, ny/norm, nz/norm
+
+    c, s, C = np.cos(theta), np.sin(theta), 1 - np.cos(theta)
+
+    R = np.empty((3,3))
+    R[0,0], R[0,1], R[0,2] = c + nx*nx*C, nx*ny*C - nz*s, nx*nz*C + ny*s
+    R[1,0], R[1,1], R[1,2] = ny*nx*C + nz*s, c + ny*ny*C, ny*nz*C - nx*s
+    R[2,0], R[2,1], R[2,2] = nz*nx*C - ny*s, nz*ny*C + nx*s, c + nz*nz*C
+
+    return R
+
+@njit
+def sample_random_axis():
+    # phi uniforme in [0, 2pi]
+    phi = 2.0 * np.pi * np.random.rand()
+    
+    # u = cos(theta) uniforme in [-1,1]
+    u = 2.0 * np.random.rand() - 1.0
+    
+    theta = np.arccos(u)
+    
+    # coordinate cartesiane dell'asse
+    nx = np.sin(theta) * np.cos(phi)
+    ny = np.sin(theta) * np.sin(phi)
+    nz = np.cos(theta)
+    
+    return np.array([nx, ny, nz])
+
 @njit
 def idx_nearest(z, z0, dz, N):
     # z0 = zgrid[0], dz = zgrid[1]-zgrid[0], N = len(zgrid)
@@ -263,21 +301,19 @@ def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid):
     
     return dB_dx, dB_dy, dB_dz
 
-@njit
-def step_all_particles(R,V,
-                       Time,seg_id, 
-                       Tloc, ramp_len,
-                       z0, dz,          # da zgrid[0], zgrid[1]-zgrid[0]
-                       dBinit,
-                       Binit,
-                       dBfinal,
-                       Bfinal,
-                       Annih, T_ann,
-                       dB_buffer):
+@njit(parallel=True)
+def step_all_particles(R,V,                             # Coordinates
+                       Time,seg_id, Tloc, ramp_len,     # Time and segment identification
+                       z0, dz,                          # zgrid[0], zgrid[1]-zgrid[0]
+                       dBinit, Binit, dBfinal, Bfinal,  # Magnetic Field and Gradient
+                       Annih, T_ann,                    # Time and flag annihilation
+                       dB_buffer,
+                       theta, tau_mixing):
     # Z, X, Y: 3d array for each particle
     
     N = R.shape[0] # Get Number of Particles
-    for i in range(N): # Lop on particles
+    
+    for i in prange(N): # Lop on particles
         if Annih[i]:
             continue
 
@@ -339,3 +375,11 @@ def step_all_particles(R,V,
         if (z_new < zacceptance_min) or (z_new > zacceptance_max):
             Annih[i] = True
             T_ann[i] = Time + dt
+
+        # --- Mixing ----
+        prob = dt / tau_mixing
+        
+        if np.random.rand() < prob:
+            axis = sample_random_axis()
+            Matrix = rotation_matrix_axis_angle(axis, theta)
+            V[i] = Matrix @ V[i]

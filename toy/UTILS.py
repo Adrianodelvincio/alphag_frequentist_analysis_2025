@@ -3,7 +3,7 @@ from   scipy.optimize import brentq
 import numpy as np
 from   numba import njit
 import numba as nb
-from numba import prange
+#from numba import prange
 
 ####### Module variables
 dt                   = 1e-4 #seconds
@@ -301,7 +301,7 @@ def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid):
     
     return dB_dx, dB_dy, dB_dz
 
-@njit(parallel=True)
+@njit
 def step_all_particles(R,V,                             # Coordinates
                        Time,seg_id, Tloc, ramp_len,     # Time and segment identification
                        z0, dz,                          # zgrid[0], zgrid[1]-zgrid[0]
@@ -313,7 +313,7 @@ def step_all_particles(R,V,                             # Coordinates
     
     N = R.shape[0] # Get Number of Particles
     
-    for i in prange(N): # Lop on particles
+    for i in range(N): # Lop on particles
         if Annih[i]:
             continue
 
@@ -383,3 +383,96 @@ def step_all_particles(R,V,                             # Coordinates
             axis = sample_random_axis()
             Matrix = rotation_matrix_axis_angle(axis, theta)
             V[i] = Matrix @ V[i]
+
+
+@njit(fastmath=True)
+def evolve_all_particles(R_array, V_array, Time,
+        z0, dz,
+        Annihilation, Time_Annihilation,
+        dB_buffer,
+        theta, tau_mixing,
+        dBfield_20mT_pregravity_dz,
+        Bfield_20mT_pregravity_grid,
+        dBfield_17mT_dz,
+        Bfield_17mT_grid,
+        dBfield_5mT_dz,
+        Bfield_5mT_grid,
+        dBfield_2p5mT_dz,
+        Bfield_2p5mT_grid,
+        Tramp1, wait_ramp1, 
+        Tramp2, wait_ramp2, 
+        Tramp3, wait_ramp3):
+
+    for frame in range(0,int(wait_ramp3/dt)):
+        #print(Time)
+    
+        # ================================================================
+        # Identify Segment
+        # ================================================================
+            # identifica il segmento e i campi da passare
+        if 0 <= Time < Tramp1:
+            seg_id   = 0
+            Tloc     = Time - 0.0
+            ramp_len = Tramp1
+            dBinit   = dBfield_20mT_pregravity_dz
+            Binit    = Bfield_20mT_pregravity_grid
+            dBfinal  = dBfield_17mT_dz
+            Bfinal   = Bfield_17mT_grid
+    
+        elif Tramp1 <= Time < wait_ramp1:
+            seg_id   = 1   # plateau
+            Tloc     = 0.0
+            ramp_len = 0.0
+            dBinit   = dBfield_20mT_pregravity_dz  # non usato
+            Binit    = Bfield_20mT_pregravity_grid 
+            dBfinal  = dBfield_17mT_dz             # usi questo
+            Bfinal   = Bfield_17mT_grid
+    
+        elif wait_ramp1 <= Time < Tramp2:
+            seg_id   = 0
+            Tloc     = Time - wait_ramp1
+            ramp_len = Tramp2 - wait_ramp1
+            dBinit   = dBfield_17mT_dz
+            Binit    = Bfield_17mT_grid
+            dBfinal  = dBfield_5mT_dz
+            Bfinal   = Bfield_5mT_grid
+    
+        elif Tramp2 <= Time < wait_ramp2:
+            seg_id   = 1
+            Tloc     = 0.0
+            ramp_len = 0.0
+            dBinit   = dBfield_17mT_dz
+            Binit    = Bfield_17mT_grid
+            dBfinal  = dBfield_5mT_dz
+            Bfinal   = Bfield_5mT_grid
+    
+        elif wait_ramp2 <= Time < Tramp3:
+            seg_id   = 0
+            Tloc     = Time - wait_ramp2
+            ramp_len = Tramp3 - wait_ramp2
+            dBinit   = dBfield_5mT_dz
+            Binit    = Bfield_5mT_grid
+            dBfinal  = dBfield_2p5mT_dz
+            Bfinal   = Bfield_2p5mT_grid
+    
+        else:
+            seg_id   = 1
+            Tloc     = 0.0
+            ramp_len = 0.0
+            dBinit   = dBfield_5mT_dz
+            Binit    = Bfield_5mT_grid
+            dBfinal  = dBfield_2p5mT_dz
+            Bfinal   = Bfield_2p5mT_grid
+    
+        # step di tutte le particelle (in-place)
+        step_all_particles(
+            R_array, V_array, Time,
+            seg_id, Tloc, ramp_len,
+            z0, dz,
+            dBinit, Binit, dBfinal, Bfinal,
+            Annihilation, Time_Annihilation,
+            dB_buffer,
+            theta, tau_mixing)
+    
+        # Avanza il tempo UNA volta per frame
+        Time += dt

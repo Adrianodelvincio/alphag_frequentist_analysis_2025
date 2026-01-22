@@ -47,29 +47,6 @@ def Gradient_Computation_3d(f, x, y, z,  h=0.0005):
     df_dz = (f(z + dz) - f(z - dz)) / (2*h)
     return [df_dx, df_dy, df_dz]
 
-def Verlet_Update(V, Z, Time, Bfield, h=0.0005):
-    """
-    Return Velocity V(t + dt), x(t + dt)
-    Implementation of the Verlet Algorithm
-    """
-
-    dB_dz = (Bfield(Z + h) - Bfield(Z - h))/(2*h)
-    
-    ACC = - .5 * bohr_magneton * dB_dz  / mass # Compute the acceleration at the current step
-    
-    Z_nextstep = Z + V*dt + .5*ACC*dt**2 # 1. compute the next step
-
-    dB_dznext = (Bfield(Z_nextstep + h) - Bfield(Z_nextstep - h))/(2*h)
-    
-    ACC_nextstep = - .5 * bohr_magneton * dB_dznext / mass # 2. compute the acceleration at the next step
-    
-    V_nextstep = V + 0.5*(ACC + ACC_nextstep)*dt # 3. compute the velocity at the next step
-    
-    #print(f"Z position {Z:.3f} speed {V*1e-3:.3f} acceleration {ACC:.4f} acceleration next step {ACC_nextstep:.4f}")
-    #print(Z_nextstep, V_nextstep)
-    
-    return V_nextstep, Z_nextstep, (Time + dt)
-
 def InitialCondition(Bfield, CONSTANTS):
     """
     Return v(t = 0), z(t = 0)
@@ -232,7 +209,7 @@ def idx_nearest(z, z0, dz, N):
         idx = N - 1
     return idx
 
-@njit
+@njit(fastmath=True)
 def dB_seg(z, x, y,
            Tloc, ramplength, 
            z0, dz, 
@@ -250,14 +227,14 @@ def dB_seg(z, x, y,
     dinit  = dBinit[i]
     dfinal = dBfinal[i]
 
-    r = np.sqrt((x*x + y*y)) # compute radius
+    r2 = (x*x + y*y) # compute radius
 
-    if r > 0:
-        coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
-        coeff_x = harmonic_degree * harmonic_coefficient * x * r**(harmonic_degree - 2)
-        coeff_y = harmonic_degree * harmonic_coefficient * y * r**(harmonic_degree - 2)
+    if r2 > 0:
+        coeff_z = (1 + harmonic_coefficient * r2)
+        coeff_x = harmonic_degree * harmonic_coefficient * x
+        coeff_y = harmonic_degree * harmonic_coefficient * y
     else:
-        coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
+        coeff_z = (1 + harmonic_coefficient * r2)
         coeff_x = 0.0
         coeff_y = 0.0
     
@@ -277,20 +254,19 @@ def dB_seg(z, x, y,
     
     return dBt_dx, dBt_dy, dBt_dz
 
-@njit
+@njit(fastmath=True)
 def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid):
     N = dBgrid.shape[0]
     i = idx_nearest(z, z0, dz, N)
 
-    r = np.sqrt((x*x + y*y)) # compute radius
-    coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
+    r2 = (x*x + y*y) # compute radius
     
-    if r > 0:
-        coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
-        coeff_x = harmonic_degree * harmonic_coefficient * x * r**(harmonic_degree - 2)
-        coeff_y = harmonic_degree * harmonic_coefficient * y * r**(harmonic_degree - 2)
+    if r2 > 0:
+        coeff_z = (1 + harmonic_coefficient * r2)
+        coeff_x = harmonic_degree * harmonic_coefficient * x
+        coeff_y = harmonic_degree * harmonic_coefficient * y
     else:
-        coeff_z = (1 + harmonic_coefficient * r**harmonic_degree)
+        coeff_z = (1 + harmonic_coefficient * r2)
         coeff_x = 0.0
         coeff_y = 0.0
     
@@ -301,88 +277,111 @@ def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid):
     
     return dB_dx, dB_dy, dB_dz
 
-@njit
-def step_all_particles(R,V,                             # Coordinates
-                       Time,seg_id, Tloc, ramp_len,     # Time and segment identification
-                       z0, dz,                          # zgrid[0], zgrid[1]-zgrid[0]
-                       dBinit, Binit, dBfinal, Bfinal,  # Magnetic Field and Gradient
-                       Annih, T_ann,                    # Time and flag annihilation
-                       dB_buffer,
-                       theta, tau_mixing):
-    # Z, X, Y: 3d array for each particle
-    
-    N = R.shape[0] # Get Number of Particles
-    
-    for i in range(N): # Lop on particles
+@njit(fastmath=True)
+def step_all_particles(
+    R, V,                             # Coordinates (N,3)
+    Time, seg_id, Tloc, ramp_len,     # Time and segment identification
+    z0, dz,                           # zgrid[0], zgrid[1]-zgrid[0]
+    dBinit, Binit, dBfinal, Bfinal,   # Magnetic Field and Gradient
+    Annih, T_ann,                     # Time and flag annihilation
+    dB_buffer,                        # (unused now, kept for compatibility)
+    theta, tau_mixing
+):
+    N = R.shape[0]
+
+    # precompute constants used everywhere
+    half_dt   = 0.5 * dt
+    half_dt2  = 0.5 * dt * dt
+    prob      = dt / tau_mixing
+
+    for i in range(N):
         if Annih[i]:
             continue
 
-        # get coordinates
-        x = R[i, 0]
-        y = R[i, 1]
-        z = R[i, 2]
+        # load scalars
+        x  = R[i, 0]
+        y  = R[i, 1]
+        z  = R[i, 2]
+        vx = V[i, 0]
+        vy = V[i, 1]
+        vz = V[i, 2]
 
-        if(seg_id == 0): # ramp
-            dBx, dBy, dBz = dB_seg(z, x, y,
-                        Tloc, ramp_len, 
-                        z0, dz, 
-                        dBinit,
-                        Binit,
-                        dBfinal,
-                        Bfinal) # Compute the Gradient
-        elif(seg_id == 1): # wait
-            dBx, dBy, dBz = dB_plateau(z, x, y, 
-                            z0, dz, 
-                            dBfinal, 
-                            Bfinal)
-        # set gradient vector
-        dB_buffer[0] = dBx
-        dB_buffer[1] = dBy
-        dB_buffer[2] = dBz
-        a  = -mu_eff_over_m * dB_buffer # compute the acceleration as gradient * magnetic moment / mass
+        # --- gradient at current step ---
+        if seg_id == 0:  # ramp
+            dBx, dBy, dBz = dB_seg(
+                z, x, y,
+                Tloc, ramp_len,
+                z0, dz,
+                dBinit, Binit,
+                dBfinal, Bfinal
+            )
+        else:            # seg_id == 1: wait
+            dBx, dBy, dBz = dB_plateau(
+                z, x, y,
+                z0, dz,
+                dBfinal, Bfinal
+            )
 
-        # --- Verlet position update ---
-        R_new = R[i] + V[i]*dt + 0.5*a*dt*dt
-        # get coordinates
-        x_new = R_new[0]
-        y_new = R_new[1]
-        z_new = R_new[2]
-        
-        # --- dB/dz at next step ---
-        if seg_id == 0: # ramp
-            dBx, dBy, dBz = dB_seg(z_new, x_new, y_new,
-                             Tloc+dt, ramp_len,
-                             z0, dz,
-                             dBinit, 
-                             Binit,
-                             dBfinal,
-                             Bfinal)
-        elif seg_id == 1: # wait
-            dBx, dBy, dBz = dB_plateau(z_new, x_new, y_new, 
-                                 z0, dz, 
-                                 dBfinal,
-                                 Bfinal)
-        dB_buffer[0] = dBx
-        dB_buffer[1] = dBy
-        dB_buffer[2] = dBz
-        a_next = -mu_eff_over_m * dB_buffer
+        # acceleration (scalars)
+        ax = -mu_eff_over_m * dBx
+        ay = -mu_eff_over_m * dBy
+        az = -mu_eff_over_m * dBz
 
-        # --- Update Velocity and Position ---
-        V[i] = V[i] + 0.5*(a + a_next)*dt
-        R[i] = R_new
+        # --- Verlet position update (scalars) ---
+        x_new = x + vx*dt + ax*half_dt2
+        y_new = y + vy*dt + ay*half_dt2
+        z_new = z + vz*dt + az*half_dt2
 
-        # --- annichilazione se esce ---
+        # --- gradient at next step ---
+        if seg_id == 0:  # ramp
+            dBx2, dBy2, dBz2 = dB_seg(
+                z_new, x_new, y_new,
+                Tloc + dt, ramp_len,
+                z0, dz,
+                dBinit, Binit,
+                dBfinal, Bfinal
+            )
+        else:            # wait
+            dBx2, dBy2, dBz2 = dB_plateau(
+                z_new, x_new, y_new,
+                z0, dz,
+                dBfinal, Bfinal
+            )
+
+        ax2 = -mu_eff_over_m * dBx2
+        ay2 = -mu_eff_over_m * dBy2
+        az2 = -mu_eff_over_m * dBz2
+
+        # --- Velocity update (scalars) ---
+        vx = vx + (ax + ax2) * half_dt
+        vy = vy + (ay + ay2) * half_dt
+        vz = vz + (az + az2) * half_dt
+
+        # --- store back ---
+        R[i, 0] = x_new
+        R[i, 1] = y_new
+        R[i, 2] = z_new
+        V[i, 0] = vx
+        V[i, 1] = vy
+        V[i, 2] = vz
+
+        # --- ?annihilation? ---
         if (z_new < zacceptance_min) or (z_new > zacceptance_max):
             Annih[i] = True
             T_ann[i] = Time + dt
+            continue  # opzionale: evita mixing se annichilito
 
         # --- Mixing ----
-        prob = dt / tau_mixing
-        
         if np.random.rand() < prob:
+            # qui puoi lasciare il tuo codice così com'è
             axis = sample_random_axis()
             Matrix = rotation_matrix_axis_angle(axis, theta)
-            V[i] = Matrix @ V[i]
+
+            # Matrix @ V[i] senza temporanei: moltiplicazione scalare
+            vx0 = V[i, 0]; vy0 = V[i, 1]; vz0 = V[i, 2]
+            V[i, 0] = Matrix[0,0]*vx0 + Matrix[0,1]*vy0 + Matrix[0,2]*vz0
+            V[i, 1] = Matrix[1,0]*vx0 + Matrix[1,1]*vy0 + Matrix[1,2]*vz0
+            V[i, 2] = Matrix[2,0]*vx0 + Matrix[2,1]*vy0 + Matrix[2,2]*vz0
 
 
 @njit(fastmath=True)
@@ -403,6 +402,29 @@ def evolve_all_particles(R_array, V_array, Time,
         Tramp2, wait_ramp2, 
         Tramp3, wait_ramp3):
 
+    #------------------------------------------
+    # Wait for Thermalization of the particles
+    for frame in range(0,int(40/dt)):
+        # step di tutte le particelle (in-place)
+        seg_id   = 1   # plateau
+        Tloc     = 0.0
+        ramp_len = 0.0
+        dBinit   = dBfield_20mT_pregravity_dz  # non usato
+        Binit    = Bfield_20mT_pregravity_grid 
+        dBfinal  = dBfield_20mT_pregravity_dz  # usi questo
+        Bfinal   = Bfield_20mT_pregravity_grid
+        step_all_particles(
+            R_array, V_array, Time,
+            seg_id, Tloc, ramp_len,
+            z0, dz,
+            dBinit, Binit, dBfinal, Bfinal,
+            Annihilation, Time_Annihilation,
+            dB_buffer,
+            theta, tau_mixing)
+        # No time update
+        #Time += dt
+    #------------------------------------------
+    
     for frame in range(0,int(wait_ramp3/dt)):
         #print(Time)
     

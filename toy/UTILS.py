@@ -1,9 +1,10 @@
 from   scipy.stats    import maxwell
 from   scipy.optimize import brentq
 import numpy as np
-from   numba import njit
+from   numba import njit, prange, set_num_threads
 import numba as nb
-#from numba import prange
+
+set_num_threads(7)
 
 ####### Module variables
 dt                   = 1e-4 #seconds
@@ -23,7 +24,6 @@ mu_eff_over_m        =  (bohr_magneton) / mass
 # tau_mixing           = int(170/2)
 # theta = np.pi/4
 ######
-
 
 def Gradient_Computation_1d(f, z, h=0.0005):
     """
@@ -277,7 +277,7 @@ def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid):
     
     return dB_dx, dB_dy, dB_dz
 
-@njit(fastmath=True)
+@njit(parallel=True,fastmath=True)
 def step_all_particles(
     R, V,                             # Coordinates (N,3)
     Time, seg_id, Tloc, ramp_len,     # Time and segment identification
@@ -294,7 +294,8 @@ def step_all_particles(
     half_dt2  = 0.5 * dt * dt
     prob      = dt / tau_mixing
 
-    for i in range(N):
+    #for i in range(N):  <---- SERIAL
+    for i in prange(N):# <---- Parallel
         if Annih[i]:
             continue
 
@@ -405,6 +406,9 @@ def evolve_all_particles(R_array, V_array, Time,
     #------------------------------------------
     # Wait for Thermalization of the particles
     for frame in range(0,int(40/dt)):
+
+        inverse_time = -40 + frame*dt
+        
         # step di tutte le particelle (in-place)
         seg_id   = 1   # plateau
         Tloc     = 0.0
@@ -414,7 +418,7 @@ def evolve_all_particles(R_array, V_array, Time,
         dBfinal  = dBfield_20mT_pregravity_dz  # usi questo
         Bfinal   = Bfield_20mT_pregravity_grid
         step_all_particles(
-            R_array, V_array, Time,
+            R_array, V_array, inverse_time,
             seg_id, Tloc, ramp_len,
             z0, dz,
             dBinit, Binit, dBfinal, Bfinal,

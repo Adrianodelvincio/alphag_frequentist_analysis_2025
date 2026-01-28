@@ -1,0 +1,17 @@
+for f in Bfield/*.txt; do   out="Bfield_csv/$(basename "${f%.txt}.csv")"   awk -v HEADER="$HEADER" '
+    NR==1 { next }         # skip prima riga
+    NR==2 { print HEADER; next }   # stampa header fisso
+
+    {
+      sub(/\r$/, "")      # rimuove CR se presente
+      if ($0 ~ /^[[:space:]]*$/) next
+
+      n = split($0, a, /[ \t]+/)
+
+      printf "%s,%s,%s,%s\n",
+             (n>=1 ? a[1] : ""),
+             (n>=2 ? a[2] : ""),
+             (n>=3 ? a[3] : ""),
+             (n>=4 ? a[4] : "")
+    }
+  ' "$f" > "$out"   echo "$f -> $out"; done

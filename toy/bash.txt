@@ -1,4 +1,9 @@
-for f in Bfield/*.txt; do   out="Bfield_csv/$(basename "${f%.txt}.csv")"   awk -v HEADER="$HEADER" '
+HEADER='z (mm) - Bz on axis,Total potential (T) - Bz on axis,z (mm) - Min |B| on wall,Total potential (T) - Min |B| on wall'
+
+for f in Bfield_nog/*.txt; do
+  out="Bfield_nog_csv/$(basename "${f%.txt}.csv")"
+
+  awk -v HEADER="$HEADER" '
     NR==1 { next }         # skip prima riga
     NR==2 { print HEADER; next }   # stampa header fisso
 
@@ -14,4 +19,7 @@ for f in Bfield/*.txt; do   out="Bfield_csv/$(basename "${f%.txt}.csv")"   awk -
              (n>=3 ? a[3] : ""),
              (n>=4 ? a[4] : "")
     }
-  ' "$f" > "$out"   echo "$f -> $out"; done
+  ' "$f" > "$out"
+
+  echo "$f -> $out"
+done

@@ -17,7 +17,7 @@ harmonic_degree      = 2  # degree of the harmonic potential
 harmonic_coefficient = 50 # coefficient harmonic potential
 Zmin                 = -0.605 # m
 Zmax                 = -0.481 # m
-Zmid                 = -0.5434 # m2
+Zmid                 = -0.5434# m
 zacceptance_min      = -0.775
 zacceptance_max      = -0.325
 mu_eff_over_m        =  (bohr_magneton) / mass
@@ -124,18 +124,25 @@ def InitialCondition_3d(Bfield, CONSTANTS):
     
     # Now find the corresponding Z at which the U(z) =  Ek_axial
     #print(Ek_axial, Potential(CONSTANTS.Zmax) - Potential(CONSTANTS.Zmid) )
-    
-    Zsol1 = brentq(lambda z: Potential(z) - Potential(CONSTANTS.Zmid) - Ek_axial, 
-                  CONSTANTS.Zmid,
-                  CONSTANTS.Zmax)
-    Zsol2 = brentq(lambda z: Potential(z) - Potential(CONSTANTS.Zmid) - Ek_axial, 
-                  CONSTANTS.Zmin, 
-                  CONSTANTS.Zmid)
+    # print(Ek_axial)
+    # try:
+    #     Zsol1 = brentq(lambda z: Potential(z) - Potential(CONSTANTS.Zmid) - Ek_axial, 
+    #                   CONSTANTS.Zmid,
+    #                   CONSTANTS.Zmax)
+    #     Zsol2 = brentq(lambda z: Potential(z) - Potential(CONSTANTS.Zmid) - Ek_axial, 
+    #                   CONSTANTS.Zmin, 
+    #                   CONSTANTS.Zmid)
+    # except:
+    #     print("error in brentq")
+    #     print(f"{Ek_axial}")
+    #     print(f" {Potential(CONSTANTS.Zmin) - Potential(CONSTANTS.Zmid) - Ek_axial}, {Potential(CONSTANTS.Zmid) - Potential(CONSTANTS.Zmid) - Ek_axial}")
+        
+        
 
-    Zsample = np.random.uniform(Zsol1, Zsol2)
+    #Zsample = np.random.uniform(Zsol1, Zsol2)
     
     # compute new kinetic energy
-    Ek_axial = Ek_axial - (Potential(Zsample) - Potential(CONSTANTS.Zmid))
+    #Ek_axial = Ek_axial - (Potential(Zsample) - Potential(CONSTANTS.Zmid))
 
     if(Ek_axial < 0):
         print(f"Error!!!, Ek_axial {Ek_axial} < 0, fixing it")
@@ -158,7 +165,7 @@ def InitialCondition_3d(Bfield, CONSTANTS):
     theta = np.random.uniform(0, 2*np.pi)
     vx, vy = v_transv * np.cos(theta), v_transv * np.sin(theta)
     
-    return np.array([vx, vy, v_axial], dtype=float), np.array([0, 0, Zsample], dtype=float)
+    return np.array([vx, vy, v_axial], dtype=float), np.array([0, 0, CONSTANTS.Zmid], dtype=float)
 
 
 #################################################

@@ -1,0 +1,18 @@
+#run ; bias; type_ramp ; segment1 ; err. segment1 ; segment2 ; err. segment2 ; segment3 ; err. segment3 ; segment4 ; err. segment4 
+r14106 	 -2.000 	 short 	 -0.502 	 0.434 	 -0.980 	 0.020 	 -1.000 	 0.002 	 nan 	 nan
+r14342 	 -1.250 	 long 	 0.201 	 0.439 	 -0.422 	 0.048 	 -0.911 	 0.027 	 -1.009 	 0.014
+r14268 	 -1.250 	 short 	 -1.021 	 0.206 	 -0.326 	 0.100 	 -0.837 	 0.052 	 nan 	 nan
+r14347 	 -1.125 	 long 	 0.430 	 0.342 	 -0.361 	 0.044 	 -0.687 	 0.051 	 -0.894 	 0.054
+r14286 	 -1.000 	 short 	 1.012 	 0.110 	 0.000 	 0.162 	 -0.500 	 0.116 	 nan 	 nan
+r14332 	 -1.000 	 long 	 0.001 	 0.711 	 -0.129 	 0.054 	 -0.396 	 0.067 	 -0.743 	 0.087
+r14338 	 -0.875 	 long 	 -0.334 	 0.385 	 -0.039 	 0.053 	 -0.020 	 0.103 	 0.195 	 0.176
+r14112 	 -0.750 	 short 	 0.144 	 0.375 	 0.093 	 0.115 	 0.115 	 0.138 	 nan 	 nan
+r14314 	 -0.750 	 short 	 0.669 	 0.304 	 0.145 	 0.091 	 0.296 	 0.085 	 -0.077 	 1.917
+r14318 	 -0.740 	 long 	 0.201 	 0.439 	 0.146 	 0.055 	 0.245 	 0.090 	 0.826 	 0.104
+r14308 	 -0.500 	 short 	 0.638 	 0.232 	 0.697 	 0.068 	 0.869 	 0.048 	 nan 	 nan
+r14100 	 0.000 	 short 	 0.603 	 0.358 	 0.965 	 0.025 	 0.985 	 0.015 	 nan 	 nan
+r14382 	 -1.295 	 single 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan
+r14370 	 -1.071 	 single 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan
+r14447 	 -1.000 	 single 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan
+r14444 	 -0.875 	 single 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan
+r14440 	 -0.750 	 single 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan 	 nan

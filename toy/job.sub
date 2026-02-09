@@ -1,0 +1,19 @@
+universe        = vanilla
+executable      = run.sh
+
+output          = logs/out.$(ClusterId).$(ProcId).txt
+error           = logs/err.$(ClusterId).$(ProcId).txt
+log             = logs/condor.$(ClusterId).log
+
+request_cpus    = 64
+request_memory  = 8GB
++MaxRunTime     = 36000
+
+getenv          = True
+
+# Porta i file sul nodo
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = Run-Simulation.ipynb
+
+queue

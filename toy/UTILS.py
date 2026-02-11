@@ -284,7 +284,7 @@ def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid):
     
     return dB_dx, dB_dy, dB_dz
 
-@njit(parallel=True,fastmath=False)
+@njit(parallel=True,fastmath=True)
 def step_all_particles(
     R, V,                             # Coordinates (N,3)
     Time, seg_id, Tloc, ramp_len,     # Time and segment identification
@@ -392,7 +392,7 @@ def step_all_particles(
             V[i, 2] = Matrix[2,0]*vx0 + Matrix[2,1]*vy0 + Matrix[2,2]*vz0
 
 
-@njit(fastmath=False)
+@njit(fastmath=True)
 def evolve_all_particles(R_array, V_array, Time,
         z0, dz,
         Annihilation, Time_Annihilation,

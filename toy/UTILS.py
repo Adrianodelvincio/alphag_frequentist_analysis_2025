@@ -13,8 +13,8 @@ bohr_magneton        = 9.2740100657e-24 # J/T, CODATA 2022
 kB                   = 1.380649e-23   # J/K
 Temperature          = 5e-3 # K
 Temperature_transv   = 5e-3 # K
-harmonic_degree      = 2  # degree of the harmonic potential
-harmonic_coefficient = 50 # coefficient harmonic potential
+harmonic_degree      = 6  # degree of the harmonic potential
+harmonic_coefficient = 2.37200451e8 # coefficient harmonic potential
 Zmin                 = -0.605 # m
 Zmax                 = -0.481 # m
 Zmid                 = -0.5434# m
@@ -234,14 +234,15 @@ def dB_seg(z, x, y,
     dinit  = dBinit[i]
     dfinal = dBfinal[i]
 
-    r2 = (x*x + y*y) # compute radius
-
-    if r2 > 0:
-        coeff_z = (1 + harmonic_coefficient * r2)
-        coeff_x = harmonic_degree * harmonic_coefficient * x
-        coeff_y = harmonic_degree * harmonic_coefficient * y
+    r = (x*x + y*y)**.5 # compute radius
+    rp = r**harmonic_degree
+    rm = r**(harmonic_degree -2)
+    if r > 0:
+        coeff_z = (1 + harmonic_coefficient * rp)
+        coeff_x = harmonic_degree * harmonic_coefficient * x * rm
+        coeff_y = harmonic_degree * harmonic_coefficient * y * rm
     else:
-        coeff_z = (1 + harmonic_coefficient * r2)
+        coeff_z = 1
         coeff_x = 0.0
         coeff_y = 0.0
     
@@ -266,14 +267,15 @@ def dB_plateau(z, x, y, z0, dz, dBgrid, Bgrid):
     N = dBgrid.shape[0]
     i = idx_nearest(z, z0, dz, N)
 
-    r2 = (x*x + y*y) # compute radius
-    
-    if r2 > 0:
-        coeff_z = (1 + harmonic_coefficient * r2)
-        coeff_x = harmonic_degree * harmonic_coefficient * x
-        coeff_y = harmonic_degree * harmonic_coefficient * y
+    r = (x*x + y*y)**.5 # compute radius
+    rp = r**harmonic_degree
+    rm = r**(harmonic_degree -2)
+    if r > 0:
+        coeff_z = (1 + harmonic_coefficient * rp)
+        coeff_x = harmonic_degree * harmonic_coefficient * x * rm
+        coeff_y = harmonic_degree * harmonic_coefficient * y * rm
     else:
-        coeff_z = (1 + harmonic_coefficient * r2)
+        coeff_z = 1
         coeff_x = 0.0
         coeff_y = 0.0
     

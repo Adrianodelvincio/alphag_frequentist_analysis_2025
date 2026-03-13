@@ -7,7 +7,7 @@ import numba as nb
 set_num_threads(7)
 
 ####### Module variables
-dt                   = 1e-4 #seconds
+dt                   = 1e-5 #seconds
 mass                 = 1.6735575e-27 # kg, mass Hbar
 bohr_magneton        = 9.2740100657e-24 # J/T, CODATA 2022
 kB                   = 1.380649e-23   # J/K
@@ -18,6 +18,7 @@ harmonic_coefficient = 2.37200451e8 # coefficient harmonic potential
 Zmin                 = -0.605 # m
 Zmax                 = -0.481 # m
 Zmid                 = -0.5434# m
+Zmid                 = -0.5433
 zacceptance_min      = -0.775
 zacceptance_max      = -0.325
 mu_eff_over_m        =  (bohr_magneton) / mass
@@ -55,28 +56,6 @@ def BfieldExtended(function, Z, r, CONSTANTS):
     return function(Z) * (1 + CONSTANTS.harmonic_coefficient*r**CONSTANTS.harmonic_degree)
 
 
-
-# Now find the corresponding Z at which the U(z) =  Ek_axial
-#print(Ek_axial, Potential(CONSTANTS.Zmax) - Potential(CONSTANTS.Zmid) )
-# print(Ek_axial)
-# try:
-#     Zsol1 = brentq(lambda z: Potential(z) - Potential(CONSTANTS.Zmid) - Ek_axial, 
-#                   CONSTANTS.Zmid,
-#                   CONSTANTS.Zmax)
-#     Zsol2 = brentq(lambda z: Potential(z) - Potential(CONSTANTS.Zmid) - Ek_axial, 
-#                   CONSTANTS.Zmin, 
-#                   CONSTANTS.Zmid)
-# except:
-#     print("error in brentq")
-#     print(f"{Ek_axial}")
-#     print(f" {Potential(CONSTANTS.Zmin) - Potential(CONSTANTS.Zmid) - Ek_axial}, {Potential(CONSTANTS.Zmid) - Potential(CONSTANTS.Zmid) - Ek_axial}")    
-
-#Zsample = np.random.uniform(Zsol1, Zsol2)
-
-# compute new kinetic energy
-#Ek_axial = Ek_axial - (Potential(Zsample) - Potential(CONSTANTS.Zmid))
-
-
 def InitialCondition_3d(Bfield, CONSTANTS):
     """
     Return v(t = 0), z(t = 0)
@@ -86,55 +65,44 @@ def InitialCondition_3d(Bfield, CONSTANTS):
     would need microcanonical ensemble formalism
     """
     Potential = lambda z: (CONSTANTS.bohr_magneton) * Bfield(z) # define the potential
-
+    
     #---------------------------------------------------------
     # AXIAL ENERGY
     #---------------------------------------------------------
     
     # extracting the energy from the maxwell distribution
-    scale = np.sqrt(CONSTANTS.kB * CONSTANTS.Temperature/CONSTANTS.mass)
+    scale_axial      = np.sqrt(CONSTANTS.kB * CONSTANTS.Temperature/CONSTANTS.mass)
+    scale_transverse = np.sqrt(CONSTANTS.kB * CONSTANTS.Temperature_transv/CONSTANTS.mass)
     
     Ek_axial = 0
+    v_axial  = 0
+    dU       = Potential(CONSTANTS.Zmax) - Potential(CONSTANTS.Zmid)
     while(True):
-        v = maxwell.rvs(scale = scale, size = 1).item()
-        Ek_axial = .5 * CONSTANTS.mass *v*v # Compute kinetic energy
-        if(Ek_axial < (Potential(CONSTANTS.Zmax) - Potential(CONSTANTS.Zmid))): # check particle is trapped
-            break 
+        v_axial  = np.random.normal(scale = scale_axial)
+        Ek_axial = .5 * CONSTANTS.mass *v_axial*v_axial # Compute kinetic energy
+        
+        Z = np.random.uniform(CONSTANTS.Zmin, CONSTANTS.Zmax)
+        Z = CONSTANTS.Zmid
+        Etot = Ek_axial + (Potential(Z) - Potential(CONSTANTS.Zmid))
 
-    ####
-    #///
-    ####
-
-
+        print("total energy ", Etot, "Max Energy " , dU)
+        if(Etot < dU): # check particle is trapped
+            break
     if(Ek_axial < 0):
         print(f"Error!!!, Ek_axial {Ek_axial} < 0, fixing it")
-        Ek_axial = 0
-
+    
     # compute velocity
-    v_axial =  np.sqrt(2* Ek_axial / CONSTANTS.mass)
-    v_axial = v_axial * (np.random.choice([-1, 1]))
-
+    #v_axial =  v_axial * np.random.choice([-1,1], p = [1/2, 1/2])
+    
     #---------------------------------------------------------
     # TRANSVERSE ENERGY
     #---------------------------------------------------------
     
     # extracting the energy from the maxwell distribution
-    scale = np.sqrt(CONSTANTS.kB * CONSTANTS.Temperature_transv/CONSTANTS.mass)
+    vx, vy    = np.random.normal(scale = scale_transverse), np.random.normal(scale = scale_transverse)
+    Ek_transv = .5 * CONSTANTS.mass * (vx*vx + vy*vy) # Compute kinetic energy
     
-    v_transv = maxwell.rvs(scale = scale, size = 1).item()
-    Ek_transv = .5 * CONSTANTS.mass *v_transv*v_transv # Compute kinetic energy 
-
-    #####
-    #####
-    # Overwrite velocity
-    #v_axial  = np.sqrt(3* CONSTANTS.kB * CONSTANTS.Temperature / CONSTANTS.mass)
-    #v_transv = np.sqrt(3* CONSTANTS.kB * CONSTANTS.Temperature_transv / CONSTANTS.mass)
-    
-    theta = np.random.uniform(0, 2*np.pi)
-    vx, vy = v_transv * np.cos(theta), v_transv * np.sin(theta)
-    
-    
-    return np.array([vx, vy, v_axial], dtype=float), np.array([0, 0, CONSTANTS.Zmid], dtype=float)
+    return np.array([vx, vy, v_axial], dtype=float), np.array([0, 0, Z], dtype=float)
 
 
 #################################################
